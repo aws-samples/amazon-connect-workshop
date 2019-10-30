@@ -75,7 +75,7 @@ Create a contact center that has the following functionality:
 
 ### Create your first Contact Flow
 
-![] (images/1_TransferToQueue.png)
+![](images/1_TransferToQueue.png)
 
 1. Under Routing, select Contact Flows.
 2. Select create contact flow.
@@ -96,14 +96,14 @@ Create a contact center that has the following functionality:
 2. Under Contact flow / IVR, select the TransferToQueue contact flow you just created and save.
 3. Open up the CCP by clicking the phone icon in the upper right hand corner.
 
-![] (images/2_CCP.png)
+![](images/2_CCP.png)
 
 1. Wait a few moments and give yourself a call.
 2. Notice that when a customer is put into a queue, they are really put into the Default customer queue.  If you want to change the experience, you can.  You can also build things like interruptible queue flows.  Similarly, the agent (you) heard the Default agent whisper.  Whispers are used to share information to only one side of the conversation.
 
 ### Creating a Callback Contact Flow – Import a Contact Flow
 
-![] (images/3_TransferToCallbackQueue.png)
+![](images/3_TransferToCallbackQueue.png)
 
 1. Under Routing, select Contact Flows.
 2. Select create contact flow.
@@ -115,7 +115,7 @@ Create a contact center that has the following functionality:
 
 ### Using Hours of Operation
 
-![] (images/4_InboundCallRouter.png)
+![](images/4_InboundCallRouter.png)
 
 1. Under Routing, select Contact Flows.
 2. Select create contact flow.
@@ -136,7 +136,7 @@ Create a contact center that has the following functionality:
 
 ### Building an On Call Contact Flow
 
-![] (images/5_OnCallFlow.png)
+![](images/5_OnCallFlow.png)
 
 1. Create a contact flow and Import the OnCallFlow from the contact-flows folder.
 2. Update the Invoke AWS Lambda function module to call a lambda function that looks like ContactRouterLambda and save the module
@@ -145,7 +145,7 @@ Create a contact center that has the following functionality:
 
 ### Using Amazon Lex as a Conversational Router
 
-![] (images/6_InboundLexRouter.png)
+![](images/6_InboundLexRouter.png)
 
 1. Create a new contact flow called InboundLexRouter.
 2. Under Interact, add a Get customer input module. Add a Text to speech prompt. &quot;Would you like to wait on hold or be called back later when we are ready to serve you?&quot; Select Amazon Lex and the ConnectBot in the account. Add WaitOnHold, CallBack, and Emergency as Intents.
@@ -157,7 +157,7 @@ Create a contact center that has the following functionality:
 
 ### Using Amazon Connect and Amazon Lex for Outbound Surveys
 
-![] (images/7_CallerSurvey.png)
+![](images/7_CallerSurvey.png)
 
 1. Create a new contact flow and import the CallerSurvey contact flow.
 2. Modify the Get customer input module to point to the ConnectBot in the account.
@@ -166,7 +166,7 @@ Create a contact center that has the following functionality:
 
 ## Putting it all Together
 
-![] (images/8_EntryPoint.png)
+![](images/8_EntryPoint.png)
 1. Create a new contact flow and import the EntryPoint contact flow.
 2. Modify the first Invoke AWS Lambda function to ensure it is calling a lambda function that looks like ContactLookupLambda.
 3. Modify the Get customer input module to point to the ConnectBot in the account.
