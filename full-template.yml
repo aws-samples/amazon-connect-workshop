@@ -9,18 +9,6 @@ Globals:
     Handler: index.lambda_handler
 
 Parameters:
-  ConnectInstanceId:
-    Type: String
-    Description: |
-      The ID associated to the Amazon Connect instance
-  ConnectPhoneNumber:
-    Type: String
-    Description: |
-      The phone number associated to the Amazon Connect call center in +1XXXXXXXXXX format
-  OutboundContactFlowId:
-    Type: String
-    Description: |
-      The Contact Flow to initiate during the outbound call flow
   UserPhoneNumber:
     Type: String
     Description: |
@@ -70,23 +58,34 @@ Resources:
     Properties:
       InlineCode: |
         import boto3
+        import json
         import os
 
         sqs = boto3.client('sqs')
 
         def lambda_handler(event, context):
             print(event)
+            queue_url = os.environ['SQSQueue']
+            details = event['Details']
+            parameters = details['Parameters']
 
-            queue_url = os.environ['SQSQueue']    
-            contact_id = event['Details']['Parameters']['CustomerNumber']
+            connect_instance_id = details['ContactData']['InstanceARN'][-36:]
+            source_phone_number = details['ContactData']['SystemEndpoint']['Address']
+            body = {
+                "contact_id" : parameters['CustomerNumber'],
+                "connect_instance_id" : connect_instance_id,
+                "outbound_contact_flow_id" : parameters['OutboundContactFlowId'],
+                "source_phone_number" : source_phone_number
+            }
 
             resp = sqs.send_message(
                 QueueUrl= queue_url,
-                MessageBody=contact_id,
-                DelaySeconds=60
+                MessageBody=json.dumps(body),
+                DelaySeconds=30
             )
 
             print(resp)
+
             return {'SendMessage':'success'}
       Policies:
         - SQSSendMessagePolicy:
@@ -130,6 +129,7 @@ Resources:
     Type: 'AWS::Serverless::Function'
     Properties:
       InlineCode: | 
+        import json
         import boto3
         import os
 
@@ -137,21 +137,22 @@ Resources:
 
         def lambda_handler(event, context):
             print(event)
-
-            contact_flow_id = os.environ['ContactFlowId']
-            instance_id = os.environ['InstanceId']
-            source_phone_number = os.environ['SourcePhoneNumber']    
+            
             records = event['Records']
-            numbers = [record["body"] for record in records]
 
-            for number in numbers:
+            outbound_dials = [json.loads(record["body"]) for record in records]
+
+            for outbound_dial in outbound_dials:
                 resp = connect.start_outbound_voice_contact(
-                    ContactFlowId=contact_flow_id,
-                    InstanceId=instance_id,
-                    SourcePhoneNumber=source_phone_number,
-                    DestinationPhoneNumber=number
+                    ContactFlowId=outbound_dial["outbound_contact_flow_id"],
+                    InstanceId=outbound_dial["connect_instance_id"],
+                    SourcePhoneNumber=outbound_dial["source_phone_number"],
+                    DestinationPhoneNumber=outbound_dial["contact_id"]
                 )
                 print(resp)
+
+
+
       Policies:
       - SQSPollerPolicy:
           QueueName:
@@ -162,11 +163,6 @@ Resources:
           Action:
             - 'connect:StartOutboundVoiceContact'
           Resource: '*'
-      Environment:
-        Variables:
-          ContactFlowId: !Ref OutboundContactFlowId
-          InstanceId: !Ref ConnectInstanceId
-          SourcePhoneNumber: !Ref ConnectPhoneNumber
       Events:
         MySQSEvent:
           Type: SQS
