@@ -58,6 +58,7 @@ Create a contact center that has the following functionality:
    - ContactLookupLambda
    - ContactRouterLambda
    - InitiateOutboundDialLambda
+   - PutContactinQueueLambda
 
 # Getting Started with Amazon Connect
 
