@@ -1,0 +1,246 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: |
+  Serverless backend to support additional Amazon Connect functionality
+Globals:
+  Function:
+    Timeout: 5
+    Runtime: python3.7
+    Handler: index.lambda_handler
+
+Parameters:
+  UserPhoneNumber:
+    Type: String
+    Description: |
+      Your phone number to act as the emergency contact in +1XXXXXXXXXX format
+
+Resources:
+
+  ContactLookupLambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      InlineCode: |
+          import boto3
+          import os
+          import time
+
+          ddb = boto3.resource('dynamodb')
+
+          def lambda_handler(event, context):
+              print(event)
+
+              tb_name = os.environ['ContactHistoryTable']
+              table = ddb.Table(tb_name)    
+              contact_id = event["Details"]["Parameters"]["CustomerNumber"]
+              now = int(time.time())
+
+              resp = table.update_item(
+                  Key={"ContactId": contact_id},
+                  UpdateExpression="SET LastCall = :n",
+                  ExpressionAttributeValues={
+                      ':n': now
+                  },
+                  ReturnValues="ALL_OLD"
+              )
+              if 'Attributes' in resp:
+                  return {"ContactStatus": "return_caller"}
+              else:
+                  resp = table.put_item(Item={"ContactId": contact_id})
+                  return {"ContactStatus": "new_caller"}
+      Policies:
+        - DynamoDBCrudPolicy: 
+            TableName: !Ref ContactHistoryTable
+      Environment:
+        Variables:
+          ContactHistoryTable: !Ref ContactHistoryTable
+  PutContactinQueueLambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      InlineCode: |
+        import boto3
+        import json
+        import os
+
+        sqs = boto3.client('sqs')
+
+        def lambda_handler(event, context):
+            print(event)
+            queue_url = os.environ['SQSQueue']
+            details = event['Details']
+            parameters = details['Parameters']
+
+            connect_instance_id = details['ContactData']['InstanceARN'][-36:]
+            source_phone_number = details['ContactData']['SystemEndpoint']['Address']
+            body = {
+                "contact_id" : parameters['CustomerNumber'],
+                "connect_instance_id" : connect_instance_id,
+                "outbound_contact_flow_id" : parameters['OutboundContactFlowId'],
+                "source_phone_number" : source_phone_number
+            }
+
+            resp = sqs.send_message(
+                QueueUrl= queue_url,
+                MessageBody=json.dumps(body),
+                DelaySeconds=30
+            )
+
+            print(resp)
+
+            return {'SendMessage':'success'}
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName:
+              !GetAtt OutboundDialQueue.QueueName
+      Environment:
+        Variables:
+          SQSQueue: !Ref OutboundDialQueue
+
+  ContactRouterLambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      InlineCode: |
+        import os
+        import datetime
+
+        def lambda_handler(event, context):
+            print(event)
+
+            number = os.environ["UserPhoneNumber"]
+            escalation_number = number
+
+            onCallScheuld = {
+                0:{'TargetContact': number, 'EscalationContact': escalation_number},
+                1:{'TargetContact': number, 'EscalationContact': escalation_number},
+                2:{'TargetContact': number, 'EscalationContact': escalation_number},
+                3:{'TargetContact': number, 'EscalationContact': escalation_number},
+                4:{'TargetContact': number, 'EscalationContact': escalation_number},
+                5:{'TargetContact': number, 'EscalationContact': escalation_number},
+                6:{'TargetContact': number, 'EscalationContact': escalation_number},
+            }
+
+            dayOfWeek = datetime.datetime.today().weekday()
+
+            return onCallScheuld[dayOfWeek]
+      Environment:
+        Variables:
+          UserPhoneNumber: !Ref UserPhoneNumber
+  GetHotMessageLambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      InlineCode: |
+        import boto3
+        import json
+        import os
+        import decimal
+        import time
+        from boto3.dynamodb.conditions import Key, Attr
+
+        print('Loading function')
+
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(os.environ['HotMessageTable'])
+
+        def lambda_handler(event, context):
+            print(event)
+            
+            active_message = 'False'
+            now = int(time.time())
+
+            resp = table.scan(
+                FilterExpression =Key('EndTimeStamp').gte(now)
+                    )
+
+            description = 'NA'
+
+            if resp['Count'] == 0:
+                ans = {
+                    'ActiveMessage': active_message,
+                    'Message': description
+                }
+                return ans
+
+            items = resp['Items']
+            ans = {
+                'ActiveMessage': active_message,
+                'Message': description
+            }
+            for item in items:
+                if item['StartTimeStamp'] <= now:
+                    ans['Message'] = item['Message']
+                    ans['ActiveMessage'] = 'True'
+                    return ans
+              
+            return ans
+          
+      Environment:
+        Variables:
+          HotMessageTable: !Ref HotMessageTable
+      Policies:
+        - DynamoDBCrudPolicy: 
+            TableName: !Ref HotMessageTable
+  InitiateOutboundDialLambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      InlineCode: | 
+        import json
+        import boto3
+        import os
+
+        connect = boto3.client('connect')
+
+        def lambda_handler(event, context):
+            print(event)
+            
+            records = event['Records']
+
+            outbound_dials = [json.loads(record["body"]) for record in records]
+
+            for outbound_dial in outbound_dials:
+                resp = connect.start_outbound_voice_contact(
+                    ContactFlowId=outbound_dial["outbound_contact_flow_id"],
+                    InstanceId=outbound_dial["connect_instance_id"],
+                    SourcePhoneNumber=outbound_dial["source_phone_number"],
+                    DestinationPhoneNumber=outbound_dial["contact_id"]
+                )
+                print(resp)
+      Policies:
+      - SQSPollerPolicy:
+          QueueName:
+            !GetAtt OutboundDialQueue.QueueName
+      - Statement:
+        - Sid: OutboundCallerPolicy
+          Effect: Allow
+          Action:
+            - 'connect:StartOutboundVoiceContact'
+          Resource: '*'
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt OutboundDialQueue.Arn
+            BatchSize: 10
+
+  OutboundDialQueue:
+    Type: 'AWS::SQS::Queue'
+
+  ContactHistoryTable:
+    Type: 'AWS::Serverless::SimpleTable'
+    Properties:
+        PrimaryKey:
+          Name: ContactId
+          Type: String
+
+  HotMessageTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      BillingMode: PAY_PER_REQUEST 
+      AttributeDefinitions:
+        - AttributeName: EndTimeStamp
+          AttributeType: N
+        - AttributeName: StartTimeStamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: EndTimeStamp
+          KeyType: HASH
+        - AttributeName: StartTimeStamp
+          KeyType: RANGE
