@@ -2,13 +2,14 @@
 
 ## What are we going to build?
 Create a contact center that has the following functionality:
-1. If a phone number has called before say "welcome back", if not, greet the caller.
-2. Ask the person if they would like to be called back later to respond to a survey after the call.
-3. Using their voice to choose, give them the option of waiting on hold, being called back later, or connected to the emergency line.
-4. If they choose to wait, check to see if it is in the hours of operation and if anyone is available. If no one is currently available, put the caller in the callback queue.
-5. If they select the callback queue, place the customer in a callback queue.
-6. If they are connected to the emergency line, look up who is on call and connect the customer to that person.  If they're unable to connect, reach out to someone else.
-7. If the person choose to answer the survey, call the person back to answer a satisfaction survey.
+1. Play a hot message if there is one.
+2. If a phone number has called before say "welcome back", if not, greet the caller.
+3. Ask the person if they would like to be called back later to respond to a survey after the call.
+4. Using their voice to choose, give them the option of waiting on hold, being called back later, or connected to the emergency line.
+5. If they choose to wait, check to see if it is in the hours of operation and if anyone is available. If no one is currently available, put the caller in the callback queue.
+6. If they select the callback queue, place the customer in a callback queue.
+7. If they are connected to the emergency line, look up who is on call and connect the customer to that person.  If they're unable to connect, reach out to someone else.
+8. If the person choose to answer the survey, call the person back to answer a satisfaction survey.
 
 ## Prepare the Environment (if not already done)
 
@@ -44,6 +45,8 @@ Create a contact center that has the following functionality:
    - ContactHistoryTable: A DynamoDB table that will let you track who calls and the last time they called.
    - ContactLookupLambda: A Lambda function that when given CustomerNumber as a parameter (when invoked from Connect) will look up the number in your table and return whether they are a new_caller or return_caller via attribute ContactStatus.
    - ContactRouterLambda: A Lambda function that will return a primary contact and escalation contact (your phone number) via attributes TargetContact and EscalationContact.
+   - HotMessageTable: A DynamoDB table that will let you store hot messages to be played out to the user dynamically.
+   - GetHotMessageLambda: A Lambda function that can return any active hot message.
    - OutboundDialQueue: An SQS Queue that stores people queued for an automated outbound contact.
    - PutContactinQueueLambda: A Lambda function that puts a contact in the outbound dial queue when given CustomerNumber as a parameter from Connect.
    - InitiateOutboundDialLambda: A Lambda function that uses the SQS Queue to trigger an automated outbound dial.
@@ -57,6 +60,7 @@ Create a contact center that has the following functionality:
 5. Under the AWS Lambda section, select and add the Lambda functions created by the Cloudformation template.
    - ContactLookupLambda
    - ContactRouterLambda
+   - GetHotMessage
    - InitiateOutboundDialLambda
 
 # Getting Started with Amazon Connect
@@ -168,11 +172,12 @@ Create a contact center that has the following functionality:
 
 ![](images/8_EntryPoint.png)
 1. Create a new contact flow and import the EntryPoint contact flow.
-2. Modify the first Invoke AWS Lambda function to ensure it is calling a lambda function that looks like ContactLookupLambda.
-3. Modify the Get customer input module to point to the ConnectBot in the account.
-4. Modify the second Invoke AWS Lambda function to ensure it is calling a lambda function that looks like PutContactinQueueLambda.  Modify the OutboundContactFlowId parameter to be the contact flow ID of the survey contact flow.
-5. Modify the Transfer to flow module at the end of the contact flow to point to the InboundLexRouter contact flow.
-6. Save, Publish, and Test.
+2. Modify the first Invoke AWS Lambda function to ensure it is calling a lambda function that looks like GetHotMessageLambda.
+3. Modify the second Invoke AWS Lambda function to ensure it is calling a lambda function that looks like ContactLookupLambda.
+4. Modify the Get customer input module to point to the ConnectBot in the account.
+5. Modify the second Invoke AWS Lambda function to ensure it is calling a lambda function that looks like PutContactinQueueLambda.  Modify the OutboundContactFlowId parameter to be the contact flow ID of the survey contact flow.
+6. Modify the Transfer to flow module at the end of the contact flow to point to the InboundLexRouter contact flow.
+7. Save, Publish, and Test.
 
 # License
 This library is licensed under the MIT-0 License. See the LICENSE file.

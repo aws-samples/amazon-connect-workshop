@@ -124,7 +124,60 @@ Resources:
       Environment:
         Variables:
           UserPhoneNumber: !Ref UserPhoneNumber
-      
+  GetHotMessageLambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      InlineCode: |
+        import boto3
+        import json
+        import os
+        import decimal
+        import time
+        from boto3.dynamodb.conditions import Key, Attr
+
+        print('Loading function')
+
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(os.environ['HotMessageTable'])
+
+        def lambda_handler(event, context):
+            print(event)
+            
+            active_message = 'False'
+            now = int(time.time())
+
+            resp = table.scan(
+                FilterExpression =Key('EndTimeStamp').gte(now)
+                    )
+
+            description = 'NA'
+
+            if resp['Count'] == 0:
+                ans = {
+                    'ActiveMessage': active_message,
+                    'Message': description
+                }
+                return ans
+
+            items = resp['Items']
+            ans = {
+                'ActiveMessage': active_message,
+                'Message': description
+            }
+            for item in items:
+                if item['StartTimeStamp'] <= now:
+                    ans['Message'] = item['Message']
+                    ans['ActiveMessage'] = 'True'
+                    return ans
+              
+            return ans
+          
+      Environment:
+        Variables:
+          HotMessageTable: !Ref HotMessageTable
+      Policies:
+        - DynamoDBCrudPolicy: 
+            TableName: !Ref HotMessageTable
   InitiateOutboundDialLambda:
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -150,9 +203,6 @@ Resources:
                     DestinationPhoneNumber=outbound_dial["contact_id"]
                 )
                 print(resp)
-
-
-
       Policies:
       - SQSPollerPolicy:
           QueueName:
@@ -179,3 +229,18 @@ Resources:
         PrimaryKey:
           Name: ContactId
           Type: String
+
+  HotMessageTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      BillingMode: PAY_PER_REQUEST 
+      AttributeDefinitions:
+        - AttributeName: EndTimeStamp
+          AttributeType: N
+        - AttributeName: StartTimeStamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: EndTimeStamp
+          KeyType: HASH
+        - AttributeName: StartTimeStamp
+          KeyType: RANGE
