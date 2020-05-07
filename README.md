@@ -62,6 +62,7 @@ Create a contact center that has the following functionality:
    - ContactRouterLambda
    - GetHotMessage
    - InitiateOutboundDialLambda
+   - PutContactinQueueLambda
 
 # Getting Started with Amazon Connect
 
